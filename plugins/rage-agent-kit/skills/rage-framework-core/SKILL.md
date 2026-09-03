@@ -76,13 +76,21 @@ plugin's `deadlocks` skill.
   allowlist).
 - Internal API is `__`-prefixed and tagged `# @private`; internal ivars are `@__`;
   Fiber-locals are namespaced `:__rage_*`.
-- User-facing methods need YARD `@param`/`@return`/`@example`. CI runs
-  `yardoc --fail-on-warning`, so a malformed tag fails the build.
+- User-facing methods need YARD `@param`/`@return`/`@example` tags.
+  Malformed tags fail CI when `yardoc --fail-on-warning` runs, but that validation
+  is a separate, final verification step — run only if the user explicitly asks for it
+  in this session.
 - Active Record is not the only ORM. Sequel is a supported path via
   `Sequel.extension :fiber_concurrency`; do not assume Active Record is loaded.
 - Design docs under `docs/` follow this plugin's `docs` skill.
 
 ## Commands
+
+The commands below are a reference list of verification tools that exist in this
+project. Do not run them unprompted during feature implementation. `yardoc
+--fail-on-warning` and any RSpec invocation are final-stage verification steps — run
+them separately and only when the user explicitly asks for that verification in this
+session.
 
 ```bash
 bundle exec rake                      # default task; what CI runs

@@ -89,9 +89,10 @@ on purpose — they are just unaware of the contract.
   quasi-breaking — user wildcard handlers like `handle "cable.*"` start matching them.
 - New gems, or features that need an external service to work by default. Rage's promise is
   one process with no Redis and no separate workers.
-- YARD `@param`/`@return`/`@example` on user-facing methods (`yardoc --fail-on-warning` is
-  CI), `# @private` and `__` prefixes on internals, `# frozen_string_literal: true` on new
-  files, and a `CHANGELOG.md` entry for user-visible behavior.
+- YARD `@param`/`@return`/`@example` on user-facing methods (these tags are required;
+  running `yardoc --fail-on-warning` is a final stage, explicit request only), `# @private`
+  and `__` prefixes on internals, `# frozen_string_literal: true` on new files, and a
+  `CHANGELOG.md` entry for user-visible behavior.
 
 ## Report
 

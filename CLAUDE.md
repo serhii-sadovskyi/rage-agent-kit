@@ -46,6 +46,12 @@ When Claude Code is proposing or reviewing changes in this repo:
   block or the specific before/after lines) instead of pasting the whole file. Full-file
   reads are still fine for understanding a file — this is about what gets *shown back*.
 
+## Committing changes
+
+**Always ask before committing.** Do not commit silently. Show the diff first and wait
+for explicit approval before running `git commit`. The only exception is when the user
+has already given explicit commit instructions in this session.
+
 ## Scope
 
 This marketplace is for people changing `rage-rb/rage` source. Do not add skills, docs, or

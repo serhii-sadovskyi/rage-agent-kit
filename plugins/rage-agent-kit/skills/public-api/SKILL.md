@@ -21,9 +21,10 @@ New always-loaded files go in `lib/rage/all.rb` in dependency order; the framewo
 does not use Zeitwerk on itself. Prefer `autoload` in `lib/rage-rb.rb` for optional
 subsystems, so they cost nothing at boot for apps that never touch them.
 
-User-facing methods need YARD `@param` / `@return` / `@example`. CI runs
-`yardoc --fail-on-warning`. Internal API is `__`-prefixed and tagged `# @private`;
-internal ivars are `@__`; Fiber-locals are `:__rage_*`.
+User-facing methods need YARD `@param` / `@return` / `@example` tags.
+Running `yardoc --fail-on-warning` is a separate, final verification step — run only
+if the user explicitly asks for it in this session. Internal API is `__`-prefixed and
+tagged `# @private`; internal ivars are `@__`; Fiber-locals are `:__rage_*`.
 
 User-visible behavior needs an entry under `## [Unreleased]` in `CHANGELOG.md`
 (`Added` / `Fixed` / `Changed`). Internal-only work can use the `skip-changelog`

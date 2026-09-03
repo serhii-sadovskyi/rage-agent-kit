@@ -5,7 +5,9 @@ description: RSpec conventions for the Rage framework test suite — for rage-rb
 
 # Rage specs
 
-Write tests only after the implementation's interface has been confirmed.
+Write or run RSpec tests only when the user explicitly asks for tests in this session.
+Implementing a feature or fix is not by itself a request to add or run test coverage.
+Tests, when written, come only after the implementation's interface has been confirmed.
 
 Specs mirror `lib/`. `spec/spec_helper.rb` calls `disable_monkey_patching!`, so always use
 `RSpec.describe`, never bare `describe`, and only `expect` syntax.
