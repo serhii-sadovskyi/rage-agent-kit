@@ -1,0 +1,32 @@
+name: Validate plugin marketplace
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Validate plugin
+        run: claude plugin validate .
+
+      - name: Check plugin.json and marketplace.json versions match
+        run: |
+          plugin_version=$(jq -r '.version' plugins/rage-agent-kit/.claude-plugin/plugin.json)
+          marketplace_version=$(jq -r '.plugins[] | select(.name == "rage-agent-kit") | .version' .claude-plugin/marketplace.json)
+
+          echo "plugin.json version:      $plugin_version"
+          echo "marketplace.json version: $marketplace_version"
+
+          if [ "$plugin_version" != "$marketplace_version" ]; then
+            echo "::error::Version mismatch between plugin.json ($plugin_version) and marketplace.json ($marketplace_version)"
+            exit 1
+          fi
