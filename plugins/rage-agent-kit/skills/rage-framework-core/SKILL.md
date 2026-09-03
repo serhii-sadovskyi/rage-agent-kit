@@ -106,6 +106,24 @@ coverage — say which specs did not actually run rather than claiming they pass
 
 Never commit spec artifacts such as `storage/deferred-*`.
 
+## Agent process rules
+
+- Keep all work visible via `git status`/`git diff` in the repo the user has open.
+  If you use an isolated git worktree (e.g. via an `isolation: "worktree"` agent
+  option), do not report a task as done while the result sits unmerged in that
+  worktree. Either merge the changes back into the checkout the user is looking
+  at, or explicitly tell them the worktree's path and branch name and how to
+  inspect it (e.g. `git diff main <worktree-branch>`, runnable from the main
+  checkout without `cd` since it shares the same `.git`). A worktree's changes
+  never show up in the user's editor or `git status` on their own.
+
+- Default to repo- and cwd-scoped lookups (`git` commands, ripgrep within the
+  repo, known config paths) instead of broad filesystem scans. Never run a
+  blind `find /` (or similar) sweep as a first resort — reach for a targeted
+  command first (e.g. `git worktree list` to find a worktree, not a filesystem
+  search). Only widen scope beyond the repo when a targeted lookup has failed
+  and there's a clear reason to look further.
+
 ## Report
 
 Close every change with the blocking-I/O audit, a public-API compatibility statement, and
