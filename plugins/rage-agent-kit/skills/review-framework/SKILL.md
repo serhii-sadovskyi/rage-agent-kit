@@ -33,16 +33,32 @@ whichever side happens to support the objection.
 1. Collect the diff. Default to **uncommitted work**: `git diff`, `git diff --staged`, and
    `git ls-files --others --exclude-standard`. Use `git diff main...HEAD` only when the user
    asks for branch or PR review. If the diff is empty, stop and say so.
-2. Launch both reviewers below **in parallel, in a single message**, with
+2. Collect the diff to a single file once (e.g. `git diff --staged > /tmp/<name>.patch`) and
+   pass that file path to both reviewers, rather than having each reviewer independently
+   regenerate the diff. For each touched file, tell reviewers to read the diff hunks with
+   context first, and only read the *entire* file when the surrounding logic isn't visible in
+   the hunk context — large pre-existing files (storage backends, the fiber scheduler) should
+   be read in full only when the change touches state or control flow that spans beyond what
+   the hunk shows. When the change references a design doc under docs/, point reviewers at the
+   specific sections relevant to the diff (e.g. "read §4 and §7, not the whole file") rather
+   than instructing a full-file read by default. Duplicated full-file reads across the two
+   reviewers, not model tier, are the actual driver of review cost.
+3. Launch both reviewers below **in parallel, in a single message**, with
    `subagent_type: "general-purpose"` and `run_in_background: false`. Give each the full diff,
    the paths it touches, and both the adversarial framing and the "do not report" section
    above — the scoping rule is what keeps edge-case hunting from turning into noise. Run both
    regardless of diff size — a one-line change that removes a timeout or moves a yield point
    is the highest-risk kind, not the lowest.
-3. Merge into one report. Drop duplicates, order by severity, and mark anything both
+4. Merge into one report. Drop duplicates, order by severity, and mark anything both
    reviewers raised independently.
 
 ## Reviewer A — runtime correctness
+
+Default to opus: this reviewer hunts the subtlest class of bug (crash ordering, fsync timing,
+lock re-entry, blocking I/O on the reactor, fiber leaks and re-entrancy) and opus has caught
+real high-severity issues here before. Downgrade to sonnet for cost only when the diff clearly
+does not touch durability, locking, crash-recovery, the reactor/fiber scheduler, or re-entrant
+state (anything a request can leave half-finished for the next one to see).
 
 `model: opus`
 
