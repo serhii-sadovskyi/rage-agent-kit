@@ -9,7 +9,7 @@
       "name": "rage-agent-kit",
       "source": "./plugins/rage-agent-kit",
       "description": "Skills for contributors working on the Rage framework source itself (rage-rb/rage) — blocking-I/O and fiber-deadlock rules, public API and changelog conventions, boot-time codegen, spec conventions, and an adversarial framework-code review workflow. Not for Rage application authors.",
-      "version": "0.1.2"
+      "version": "0.1.3"
     }
   ]
 }

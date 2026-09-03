@@ -50,8 +50,9 @@ nothing to invoke manually.
 
 ## Install
 
-No symlinks, no files are copied into your Rage checkout. Everything lives in Claude Code's
-plugin cache.
+Nothing is copied into your Rage checkout at install time — everything lives in Claude
+Code's plugin cache. The one exception is a `CLAUDE.md` bridge file the plugin's
+`SessionStart` hook may create; see [Session start hook](#session-start-hook) below.
 
 ```
 /plugin marketplace add serhii-sadovskyi/rage-agent-kit
@@ -85,6 +86,23 @@ installing it:
 ```bash
 claude --plugin-dir ./path/to/this-repo/plugins/rage-agent-kit
 ```
+
+## Session start hook
+
+On the first Claude Code session in a Rage framework checkout (detected by a
+`rage.gemspec` at the repo root), the plugin's `SessionStart` hook checks for a root
+`CLAUDE.md`:
+
+- If `CLAUDE.md` already exists (file, directory, or symlink — including a broken one),
+  it's left untouched.
+- Else, if `AGENTS.md` exists, the hook creates `CLAUDE.md` as a relative symlink to it,
+  so Claude Code picks up the same project rules under either filename.
+- Else, the hook creates a short plain `CLAUDE.md` pointing at this plugin's skills — it
+  never invents or duplicates project-specific rules.
+
+The hook only writes a file; it never runs `git add` or touches git state, and it's a
+no-op outside a Rage framework checkout. See
+[`plugins/rage-agent-kit/hooks/`](plugins/rage-agent-kit/hooks/).
 
 ## Versioning
 
