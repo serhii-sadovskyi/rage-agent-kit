@@ -51,8 +51,10 @@ nothing to invoke manually.
 ## Install
 
 Nothing is copied into your Rage checkout at install time — everything lives in Claude
-Code's plugin cache. The one exception is a `CLAUDE.md` bridge file the plugin's
-`SessionStart` hook may create; see [Session start hook](#session-start-hook) below.
+Code's plugin cache. The one exception is `CLAUDE.md`, which the plugin's `SessionStart`
+hook writes into your checkout on every session; see
+[Session start hook](#session-start-hook) below, including the note on it being
+overwritten each time.
 
 ```
 /plugin marketplace add serhii-sadovskyi/rage-agent-kit
@@ -87,18 +89,42 @@ installing it:
 claude --plugin-dir ./path/to/this-repo/plugins/rage-agent-kit
 ```
 
+## Uninstall / deactivate
+
+To remove the plugin entirely:
+
+```
+/plugin uninstall rage-agent-kit@rage-agent-kit
+/plugin marketplace remove serhii-sadovskyi/rage-agent-kit
+```
+
+To keep it installed but turn it off temporarily (e.g. for a single session), disable it
+instead of uninstalling:
+
+```
+/plugin disable rage-agent-kit@rage-agent-kit
+```
+
+Re-enable later with `/plugin enable rage-agent-kit@rage-agent-kit`. Note that `CLAUDE.md`
+written by the [session start hook](#session-start-hook) is not removed by uninstalling or
+disabling the plugin — it's a plain file in your checkout by that point, so delete or revert
+it manually if you no longer want it there.
+
 ## Session start hook
 
-On the first Claude Code session in a Rage framework checkout (detected by a
-`rage.gemspec` at the repo root), the plugin's `SessionStart` hook checks for a root
-`CLAUDE.md`:
+Every Claude Code session, the plugin's `SessionStart` hook looks for a Rage framework
+checkout from the working directory: either `rage.gemspec` right there, or exactly one
+immediate subdirectory containing it — the layout some setups use to keep AI-tool files
+(`AGENTS.md`, `CLAUDE.md`, `.cursor/`) in a parent directory so the checkout itself stays
+clean. Zero or more than one match (ambiguous) is a no-op.
 
-- If `CLAUDE.md` already exists (file, directory, or symlink — including a broken one),
-  it's left untouched.
-- Else, if `AGENTS.md` exists, the hook creates `CLAUDE.md` as a relative symlink to it,
-  so Claude Code picks up the same project rules under either filename.
-- Else, the hook creates a short plain `CLAUDE.md` pointing at this plugin's skills — it
-  never invents or duplicates project-specific rules.
+When a checkout is found, the hook **always overwrites `CLAUDE.md`** in the working
+directory with this plugin's
+[template](plugins/rage-agent-kit/hooks/scripts/CLAUDE.md.template), with paths rewritten
+for the detected checkout location. `CLAUDE.md` is plugin-managed — **any manual edits to
+it are silently discarded on the next session start.** Put project-specific rules
+somewhere else, such as an `AGENTS.md`: the hook never reads or touches `AGENTS.md`, so
+one there is safe from it.
 
 The hook only writes a file; it never runs `git add` or touches git state, and it's a
 no-op outside a Rage framework checkout. See
