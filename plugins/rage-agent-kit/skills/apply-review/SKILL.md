@@ -46,9 +46,10 @@ offense may be pre-existing or out of scope for this review.
 ## Reporting
 
 Report which findings were applied and which were deliberately skipped, with the reason for
-each, plus the three items `CLAUDE.md`'s "Report" section requires: the blocking-I/O audit
-("none" is a valid result, silence is not), a public-API compatibility statement, and which
-specs did not actually run.
+each, plus the blocking-I/O audit `CLAUDE.md`'s "Report" section requires ("none" is a valid
+result, silence is not). Because the fixes here came out of a review, also state the
+compatibility effect of what you applied and which specs did not actually run — that is the
+review's own closing, carried through to the changes it produced.
 
 Skipped items explicitly include any "Spec coverage" or "Ruled out" material in the review that
 was out of scope — name those as skipped rather than dropping them silently. Point the user at

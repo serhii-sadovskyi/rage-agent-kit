@@ -90,8 +90,8 @@ scheduler. Before adding any wait, park, resource pool, or pub/sub wake-up, use 
 These are the verification tools this project has, not a checklist to run. **Do not run them
 unprompted during feature implementation.** `yardoc --fail-on-warning` and any RSpec
 invocation are final-stage verification steps — run them separately, and only when the user
-explicitly asks for that verification in this session. Report which specs you therefore did
-not run rather than implying coverage you did not exercise.
+explicitly asks for that verification in this session. Never imply coverage you did not
+exercise.
 
 ```bash
 bundle exec rake                      # default task: RSpec only. CI runs rubocop and yardoc as separate jobs.
@@ -103,7 +103,7 @@ bundle exec rake appraise             # spec/ext against Active Record 7.1-8.1
 `.rspec` excludes `{{RAGE_ROOT}}spec/ext/**` from the default run. Most integration, Fiber,
 and adapter specs skip unless `ENABLE_EXTERNAL_TESTS=true` is set along with `TEST_HTTP_URL`,
 `TEST_PG_URL`, `TEST_MYSQL_URL`, and `TEST_REDIS_URL`. A green local run is not full
-coverage — say which specs did not actually run rather than claiming they passed.
+coverage — never claim specs passed that did not actually run.
 
 Never commit spec artifacts such as `{{RAGE_ROOT}}storage/deferred-*`.
 
@@ -124,5 +124,9 @@ Never commit spec artifacts such as `{{RAGE_ROOT}}storage/deferred-*`.
 
 ## Report
 
-Close every change with the blocking-I/O audit, a public-API compatibility statement, and
-which specs you did not actually run.
+Close every change with the blocking-I/O audit; "none" is a valid result, silence is not.
+
+Public-API compatibility and spec coverage are review questions, not a closing checklist on
+every change — the rage-agent-kit plugin's `review-framework` skill covers both, invoked
+deliberately. The stop-and-ask rule above still applies the moment a change actually breaks a
+public API.
