@@ -21,11 +21,17 @@ New always-loaded files go in `lib/rage/all.rb` in dependency order; the framewo
 does not use Zeitwerk on itself. Prefer `autoload` in `lib/rage-rb.rb` for optional
 subsystems, so they cost nothing at boot for apps that never touch them.
 
-User-facing methods need YARD `@param` / `@return` / `@example` tags.
-Running `yardoc --fail-on-warning` is a separate, final verification step — run only
-if the user explicitly asks for it in this session. Internal API is `__`-prefixed and
-tagged `# @private`; internal ivars are `@__`; Fiber-locals are `:__rage_*`.
+User-facing methods need YARD `@param` / `@return` / `@example` tags — write them as part
+of the change; when `yardoc` may be run to validate them is stated in `CLAUDE.md`'s Commands
+section. Internal API is `__`-prefixed and tagged `# @private`; internal ivars are `@__`;
+Fiber-locals are `:__rage_*`.
 
 User-visible behavior needs an entry under `## [Unreleased]` in `CHANGELOG.md`
-(`Added` / `Fixed` / `Changed`). Internal-only work can use the `skip-changelog`
-label instead of an entry.
+(`Added` / `Fixed` / `Changed`), prefixed with the component in brackets — `[Deferred]
+Add ...`, `[OpenAPI]`, `[Logger]` — and appending the PR number where one is known, matching
+the entries already there. If the change is internal-only, say so in the PR description and
+let a maintainer apply the `skip-changelog` label; per `CONTRIBUTING.md` that label is theirs
+to add, so do not skip the entry unilaterally.
+
+Changing a public signature does not by itself call for specs. Spec work is this plugin's
+`write-specs` skill, invoked separately once the interface is settled.

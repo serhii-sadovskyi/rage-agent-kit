@@ -1,3 +1,5 @@
+<!-- Managed by the rage-agent-kit Claude Code plugin. Edits are overwritten at session start. -->
+
 # CLAUDE.md
 
 {{RAGE_ROOT_NOTE}}
@@ -8,8 +10,8 @@ framework code: it runs on every request of every app built on Rage.
 Rationale for the rules below lives in [CONTRIBUTING.md]({{RAGE_ROOT}}CONTRIBUTING.md) and
 [ARCHITECTURE.md]({{RAGE_ROOT}}ARCHITECTURE.md). Read them before your first non-trivial
 change. Other skills in the rage-agent-kit Claude Code plugin cover file-specific conventions
-(public API, deadlocks, request path, codegen, specs, Active Record, docs, templates) — use
-the one matching the files you're touching.
+(public API, deadlocks, deferred, request path, codegen, specs, docs, templates) — use the one matching
+the files you're touching.
 
 ## Stop and ask before
 
@@ -31,8 +33,8 @@ the one matching the files you're touching.
 
 Set by `required_ruby_version` in [rage.gemspec]({{RAGE_ROOT}}rage.gemspec) and
 `TargetRubyVersion` in [.rubocop.yml]({{RAGE_ROOT}}.rubocop.yml); CI runs 3.3.0, 3.3, 3.4, and
-4.0. `.ruby-version` (3.4.3) is the local interpreter, not a target. Verify recent features
-exist in 3.3.0 — for example `it` as an implicit block parameter is 3.4+.
+4.0. Verify recent features exist in 3.3.0 — for example `it` as an implicit block parameter
+is 3.4+.
 
 ## Blocking I/O
 
@@ -40,10 +42,11 @@ One blocking call freezes the worker and every request in it. Audit every new ca
 report the result; "none" is a valid result, silence is not. This applies everywhere on the
 reactor, not just to files under `{{RAGE_ROOT}}lib/rage/middleware`.
 
-Flag as worker-freezing: native extension calls (DB drivers, crypto, compression, FFI);
-`Thread.new`; `system`, backticks, `Process.spawn`/`wait`, `IO.popen`; `flock`, `fsync`,
-large file reads and writes; long CPU-bound loops; client libraries with their own thread
-pool or `IO.select`.
+The list below is the canonical one; other rage-agent-kit skills refer to it rather than
+restating it. Flag as worker-freezing: native extension calls (DB drivers, crypto,
+compression, FFI); `Thread.new`; `system`, backticks, `Process.spawn`/`wait`, `IO.popen`;
+`flock`, `fsync`, large file reads and writes; long CPU-bound loops; client libraries with
+their own thread pool or `IO.select`.
 
 Escape hatches, in order of preference: scheduler-aware I/O, then `Iodine::WorkerPool` via
 `blocking_operation_wait`
@@ -51,7 +54,9 @@ Escape hatches, in order of preference: scheduler-aware I/O, then `Iodine::Worke
 `Rage::Deferred`, then `Fiber.new(blocking: true)` — never in the request path.
 
 `Fiber.pause` yields a tick, `Fiber.await` runs work concurrently, `Fiber.schedule` spawns.
-`Fiber.defer` is redefined by the Active Record integration; it is not plain `Fiber.yield`.
+`Fiber.defer` is redefined in
+[lib/rage/ext/setup.rb]({{RAGE_ROOT}}lib/rage/ext/setup.rb) when the Active Record
+integration loads; it is not plain `Fiber.yield`.
 
 Fiber waits deadlock silently — Ruby's deadlock detector does not cover fibers under a
 scheduler. Before adding any wait, park, resource pool, or pub/sub wake-up, use this plugin's
@@ -75,16 +80,21 @@ scheduler. Before adding any wait, park, resource pool, or pub/sub wake-up, use 
   allowlist).
 - Internal API is `__`-prefixed and tagged `# @private`; internal ivars are `@__`;
   Fiber-locals are namespaced `:__rage_*`.
-- User-facing methods need YARD `@param`/`@return`/`@example`. CI runs
-  `yardoc --fail-on-warning`, so a malformed tag fails the build.
-- Active Record is not the only ORM. Sequel is a supported path via
-  `Sequel.extension :fiber_concurrency`; do not assume Active Record is loaded.
+- User-facing methods need YARD `@param`/`@return`/`@example` tags. Write the tags as part of
+  the change; running `yardoc` to validate them is a final-stage step (see Commands).
+- Active Record is not the only ORM — do not assume it is loaded.
 - Design docs under `{{RAGE_ROOT}}docs/` follow this plugin's `docs` skill.
 
 ## Commands
 
+These are the verification tools this project has, not a checklist to run. **Do not run them
+unprompted during feature implementation.** `yardoc --fail-on-warning` and any RSpec
+invocation are final-stage verification steps — run them separately, and only when the user
+explicitly asks for that verification in this session. Report which specs you therefore did
+not run rather than implying coverage you did not exercise.
+
 ```bash
-bundle exec rake                      # default task; what CI runs
+bundle exec rake                      # default task: RSpec only. CI runs rubocop and yardoc as separate jobs.
 bundle exec rubocop
 bundle exec yardoc --fail-on-warning
 bundle exec rake appraise             # spec/ext against Active Record 7.1-8.1
@@ -96,6 +106,21 @@ and adapter specs skip unless `ENABLE_EXTERNAL_TESTS=true` is set along with `TE
 coverage — say which specs did not actually run rather than claiming they passed.
 
 Never commit spec artifacts such as `{{RAGE_ROOT}}storage/deferred-*`.
+
+## Agent process rules
+
+- Keep all work visible via `git status`/`git diff` in the repo the user has open. If you use
+  an isolated git worktree (e.g. via an `isolation: "worktree"` agent option), do not report a
+  task as done while the result sits unmerged in that worktree. Either merge the changes back
+  into the checkout the user is looking at, or explicitly tell them the worktree's path and
+  branch name and how to inspect it (e.g. `git diff main <worktree-branch>`, runnable from the
+  main checkout without `cd` since it shares the same `.git`). A worktree's changes never show
+  up in the user's editor or `git status` on their own.
+- Default to repo- and cwd-scoped lookups (`git` commands, ripgrep within the repo, known
+  config paths) instead of broad filesystem scans. Never run a blind `find /` (or similar)
+  sweep as a first resort — reach for a targeted command first (e.g. `git worktree list` to
+  find a worktree, not a filesystem search). Only widen scope beyond the repo when a targeted
+  lookup has failed and there's a clear reason to look further.
 
 ## Report
 

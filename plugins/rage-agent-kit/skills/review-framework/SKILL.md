@@ -1,12 +1,16 @@
 ---
 name: review-framework
-description: Review local Rage framework changes as framework code rather than application code — for rage-rb/rage core work only, not Rage apps. Use when the user asks to review their changes, look for bugs or edge cases, before opening a PR, or after finishing work in lib/. Runs two reviewers in parallel on split axes — runtime correctness and contract/cost/surface — hunting edge cases and failure modes rather than checking the happy path, then merges the findings.
+description: Review local Rage framework changes as framework code rather than application code — for rage-rb/rage core work only, not Rage apps. Use when the user asks to review their changes, look for bugs or edge cases, before opening a PR, or after finishing work in lib/.
 ---
 
 # Framework code review
 
 Rage runs on every request of every app built on it. Review for runtime cost and blast
 radius, not for tidiness.
+
+Two reviewers run in parallel on split axes — runtime correctness, and contract, cost and
+surface — hunting edge cases and failure modes rather than checking the happy path. Their
+findings are then merged into one report.
 
 Review adversarially. Assume the change is wrong and look for the input or the interleaving
 that proves it — the author already walked the happy path. Reviewer A hunts the ways the
@@ -33,18 +37,33 @@ whichever side happens to support the objection.
 1. Collect the diff. Default to **uncommitted work**: `git diff`, `git diff --staged`, and
    `git ls-files --others --exclude-standard`. Use `git diff main...HEAD` only when the user
    asks for branch or PR review. If the diff is empty, stop and say so.
-2. Collect the diff to a single file once (e.g. `git diff --staged > /tmp/<name>.patch`) and
-   pass that file path to both reviewers, rather than having each reviewer independently
-   regenerate the diff. For each touched file, tell reviewers to read the diff hunks with
-   context first, and only read the *entire* file when the surrounding logic isn't visible in
+2. Write that diff to a single file once and pass its path to both reviewers, rather than
+   having each reviewer regenerate it. Use the session scratchpad directory, or `mktemp` —
+   not a fixed path in shared `/tmp`. The capture must match the default target from step 1,
+   which is the working tree *and* the index:
+
+   ```bash
+   patch="$(mktemp -t review.XXXXXX)"
+   { git diff; git diff --staged; } > "$patch"
+   git ls-files --others --exclude-standard   # untracked files, listed separately: no diff to capture
+   ```
+
+   `git diff --staged` alone reviews a strict subset, and reports nothing at all on the
+   common case of an unstaged working tree.
+
+   For each touched file, tell reviewers to read the diff hunks with context first, and only read the *entire* file when the surrounding logic isn't visible in
    the hunk context — large pre-existing files (storage backends, the fiber scheduler) should
    be read in full only when the change touches state or control flow that spans beyond what
    the hunk shows. When the change references a design doc under docs/, point reviewers at the
    specific sections relevant to the diff (e.g. "read §4 and §7, not the whole file") rather
    than instructing a full-file read by default. Duplicated full-file reads across the two
    reviewers, not model tier, are the actual driver of review cost.
-3. Launch both reviewers below **in parallel, in a single message**, with
-   `subagent_type: "general-purpose"` and `run_in_background: false`. Give each the full diff,
+3. Launch both reviewers below **in parallel, in a single message** (that is what buys the
+   parallelism), with `subagent_type: "general-purpose"`, in the background — only the merge
+   in step 4 needs both results, and backgrounding leaves the user able to interject. Use
+   `model: opus` for Reviewer A, downgrading to `sonnet` for cost only when the diff clearly
+   does not touch durability, locking, crash-recovery, the reactor/fiber scheduler, or
+   re-entrant state; `model: sonnet` for Reviewer B. Give each the full diff,
    the paths it touches, and both the adversarial framing and the "do not report" section
    above — the scoping rule is what keeps edge-case hunting from turning into noise. Run both
    regardless of diff size — a one-line change that removes a timeout or moves a yield point
@@ -54,15 +73,15 @@ whichever side happens to support the objection.
 
 ## Reviewer A — runtime correctness
 
-Default to opus: this reviewer hunts the subtlest class of bug (crash ordering, fsync timing,
-lock re-entry, blocking I/O on the reactor, fiber leaks and re-entrancy) and opus has caught
-real high-severity issues here before. Downgrade to sonnet for cost only when the diff clearly
-does not touch durability, locking, crash-recovery, the reactor/fiber scheduler, or re-entrant
-state (anything a request can leave half-finished for the next one to see).
+Run this reviewer on opus by default (see step 3 for the model choice and when it may be
+downgraded): it hunts the subtlest class of bug — crash ordering, fsync timing, lock
+re-entry, blocking I/O on the reactor, fiber leaks and re-entrancy — and opus has caught real
+high-severity issues here before. "Re-entrant state" means anything a request can leave
+half-finished for the next one to see.
 
-`model: opus`
-
-- Blocking I/O anywhere on the reactor: native extensions, `Thread.new`, `system`, backticks,
+- Blocking I/O anywhere on the reactor. The canonical list is in `CLAUDE.md`; paste it into
+  the reviewer's prompt along with the rest of the shared framing, since a subagent should
+  not have to go looking for it: native extensions, `Thread.new`, `system`, backticks,
   `Process.spawn`, `IO.popen`, blocking `flock`, `fsync`, large file I/O, long CPU loops,
   clients with their own thread pool or `IO.select`.
 - Unbounded waits. Every park needs a timeout or an explicit reason it cannot hang.
@@ -81,8 +100,6 @@ state (anything a request can leave half-finished for the next one to see).
 Use this plugin's `deadlocks` skill before reviewing any wait.
 
 ## Reviewer B — contract, cost, and surface
-
-`model: sonnet`
 
 Everything here is user-facing, so ask what a user can feed it that the author did not
 picture. Framework extension points take arbitrary user code, and users are not adversarial
@@ -105,8 +122,8 @@ on purpose — they are just unaware of the contract.
   quasi-breaking — user wildcard handlers like `handle "cable.*"` start matching them.
 - New gems, or features that need an external service to work by default. Rage's promise is
   one process with no Redis and no separate workers.
-- YARD `@param`/`@return`/`@example` on user-facing methods (these tags are required;
-  running `yardoc --fail-on-warning` is a final stage, explicit request only), `# @private`
+- YARD `@param`/`@return`/`@example` on user-facing methods — the tags are required; whether
+  `yardoc` may be run to check them is `CLAUDE.md`'s call, not this review's. `# @private`
   and `__` prefixes on internals, `# frozen_string_literal: true` on new files, and a
   `CHANGELOG.md` entry for user-visible behavior.
 
@@ -116,4 +133,5 @@ Per finding: severity, file and line, what breaks and under what load, and a sug
 
 Close with which specs would actually exercise the change, noting that the default run
 excludes `spec/ext/**` and that integration and Fiber specs skip without
-`ENABLE_EXTERNAL_TESTS=true`.
+`ENABLE_EXTERNAL_TESTS=true`. Addressing a "Spec coverage" finding is a separate step: this
+plugin's `write-specs` skill, invoked deliberately by the user, not this review.

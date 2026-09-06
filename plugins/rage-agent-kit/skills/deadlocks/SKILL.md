@@ -1,6 +1,6 @@
 ---
 name: deadlocks
-description: Fiber deadlock prevention in the Rage framework — for rage-rb/rage core work only, not Rage apps. Read before writing any new wait, park, resource pool, or pub/sub wake-up, or when diagnosing a hung request or leaked fiber. Applies to lib/rage/fiber.rb, lib/rage/fiber_scheduler.rb, lib/rage/ext/active_record/**, and lib/rage/deferred/**.
+description: Fiber deadlock prevention in the Rage framework — for rage-rb/rage core work only, not Rage apps. Read before writing any new wait, park, resource pool, or pub/sub wake-up, or when diagnosing a hung request or leaked fiber. Applies to lib/rage/fiber.rb, lib/rage/fiber_scheduler.rb, lib/rage/ext/**, and lib/rage/deferred/**.
 ---
 
 # Fiber deadlocks
@@ -53,5 +53,21 @@ not on the fiber, so a second fiber locking the same fd re-acquires the lock and
 the critical section. Cross-process locking therefore needs a process-local flag on top of
 `flock` — see `@locked` in `lib/rage/deferred/backends/disk.rb`. Since the lock is
 tied to the inode, lock a dedicated file that is never renamed; locking a data file that
-gets `rename`d leaves holders on the old, unlinked inode. Always take it with `LOCK_NB` and
-retry with `sleep` — a blocking `flock` freezes the worker.
+gets `rename`d leaves holders on the old, unlinked inode. Take it with `LOCK_NB` and retry
+with `sleep` on any file another process can already hold — a blocking `flock` freezes the worker.
+A blocking `LOCK_EX` is only acceptable on a file this process just created under a name
+nothing else can guess (PID- and random-suffixed), where there is nothing to contend with.
+
+## Active Record integration
+
+`Fiber.defer` is redefined in `lib/rage/ext/setup.rb` when the integration loads; it is not
+plain `Fiber.yield`. Connection pool waits, checkout timeouts, and fiber-keyed connections
+all live under `lib/rage/ext/active_record/` — read `connection_pool.rb` before changing any
+of them. Active Record is not the only ORM: do not assume it is loaded.
+
+`.rspec` excludes `spec/ext/**` from the default run, so a green `bundle exec rake` does not
+cover this tree; it is reached by `bundle exec rake appraise` (Active Record 7.1–8.1
+gemfiles). See this plugin's `specs` skill.
+
+Implementing or fixing a wait, park, or wake-up does not by itself call for specs. Spec work
+is this plugin's `write-specs` skill, invoked separately once the interface is settled.

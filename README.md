@@ -33,15 +33,24 @@ framework-code review workflow — while working in that checkout.
 
 The `rage-agent-kit` plugin ships these skills:
 
-- **rage-framework-core** — standing contract for the framework checkout: Ruby version
-  floor, blocking I/O, performance, boot-time conventions, commands.
+- **rage-framework-core** — the framework's non-negotiables (Ruby 3.3.0 floor, nothing
+  blocking on the reactor, additive-by-default API, no new gems) and how to locate the
+  checkout root. The full contract lives in the generated `CLAUDE.md`; this skill is what
+  still holds when the session-start hook does not run.
 - **review-framework** — two-reviewer adversarial review of local framework changes.
+- **apply-review** — orchestrates applying a review-framework report's findings, grouped by
+  file and fanned out safely.
 - **public-api** — additive-API discipline, YARD, and CHANGELOG conventions.
-- **deadlocks** — fiber deadlock prevention for waits, parks, and pub/sub wake-ups.
+- **deadlocks** — fiber deadlock prevention for waits, parks, and pub/sub wake-ups, and the
+  Active Record integration under `lib/rage/ext/`.
+- **deferred** — how `Rage::Deferred` is layered: queue vs. storage backend, task lifecycle,
+  and the dead-letter store.
 - **request-path** — rules for the scheduler, `FiberWrapper`, and per-request middleware.
 - **codegen** — boot-time code generation conventions.
-- **specs** — RSpec conventions for the framework's own test suite.
-- **active-record** — Active Record integration and appraisal conventions.
+- **specs** — RSpec conventions for the framework's own test suite, including the
+  appraisal-only `spec/ext/` tree.
+- **write-specs** — decides what spec coverage a change needs and writes it, against the
+  `specs` conventions, as its own deliberately invoked step.
 - **docs** — how to edit Rage design docs under `docs/` without rewriting them.
 - **templates** — conventions for the generated app templates under `lib/rage/templates/`.
 
@@ -121,10 +130,16 @@ clean. Zero or more than one match (ambiguous) is a no-op.
 When a checkout is found, the hook **always overwrites `CLAUDE.md`** in the working
 directory with this plugin's
 [template](plugins/rage-agent-kit/hooks/scripts/CLAUDE.md.template), with paths rewritten
-for the detected checkout location. `CLAUDE.md` is plugin-managed — **any manual edits to
-it are silently discarded on the next session start.** Put project-specific rules
-somewhere else, such as an `AGENTS.md`: the hook never reads or touches `AGENTS.md`, so
-one there is safe from it.
+for the detected checkout location. The generated file opens with a
+`<!-- Managed by the rage-agent-kit Claude Code plugin -->` marker, so it is identifiable in
+place. `CLAUDE.md` is plugin-managed — **any manual edits to it are silently discarded on the
+next session start.** Put project-specific rules somewhere else, such as an `AGENTS.md`: the
+hook never reads or touches `AGENTS.md`, so one there is safe from it.
+
+If a `CLAUDE.md` without that marker is already present the first time the hook runs, it is
+copied to `CLAUDE.md.bak` before being overwritten, and a line is written to stderr saying
+so. That backup happens once — later sessions overwrite the generated file without touching
+`CLAUDE.md.bak`.
 
 The hook only writes a file; it never runs `git add` or touches git state, and it's a
 no-op outside a Rage framework checkout. See

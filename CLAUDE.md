@@ -18,8 +18,34 @@ for the audience and install instructions.
   reuse a short, consistent phrasing instead (e.g. "for rage-rb/rage core work only, not Rage
   apps"). Skill *bodies* only load once triggered, so they can be as detailed as the topic
   needs — the economy pressure applies to the description, not the content.
-- Skills load automatically; there is no manual invocation step to wire up.
+- Most skills load automatically off their description. `review-framework`, `apply-review`,
+  and `write-specs` are the exception: they are deliberately invoked steps, their
+  descriptions say so, and the passive skills point at them rather than folding their work
+  in ("Spec work is this plugin's `write-specs` skill, invoked separately"). When adding a
+  skill, decide which of the two it is and write the description to match.
 - New skills need an entry in the `README.md` "What's included" list.
+
+## The session hook and its template
+
+The plugin also ships a `SessionStart` hook under `plugins/rage-agent-kit/hooks/`:
+`hooks.json` wires up `scripts/sync-claude-md.sh`, which renders
+`scripts/CLAUDE.md.template` into a `CLAUDE.md` in the consumer's Rage checkout at every
+session start. Three constraints come with it:
+
+- The template is the single source of truth for the rules every framework session needs —
+  the canonical worker-freezing list, when `yardoc` and RSpec may be run, agent process
+  rules, the closing report. Skills reference it ("the canonical list is in `CLAUDE.md`")
+  instead of restating it, and `rage-framework-core` deliberately keeps only the
+  non-negotiables that must still hold when the hook does not run (ambiguous layout, or
+  outside a checkout). Change a shared rule in the template, then check that no skill has
+  drifted into repeating it.
+- `sync-claude-md.sh` is POSIX `sh` and POSIX `sed` only — it runs against whatever `sed`
+  the consumer has, and the BSD one on macOS rejects GNU-only constructs such as the
+  `addr,+N` address form. Anything interpolated into a `sed` replacement goes through
+  `escape_replacement`.
+- What the hook writes, backs up (`CLAUDE.md.bak`), and leaves alone (`AGENTS.md`) is
+  documented for consumers in the `README.md` "Session start hook" section. Changing that
+  behavior means updating the section in the same commit.
 
 ## Versioning
 

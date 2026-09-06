@@ -1,13 +1,13 @@
 ---
 name: specs
-description: RSpec conventions for the Rage framework test suite — for rage-rb/rage core work only, not Rage apps. Use when writing or editing files under spec/**/*.rb.
+description: RSpec conventions for the Rage framework test suite — for rage-rb/rage core work only, not Rage apps. Use when writing or editing files under spec/**/*.rb or gemfiles/**, including the appraisal-only spec/ext tree.
 ---
 
 # Rage specs
 
-Write or run RSpec tests only when the user explicitly asks for tests in this session.
-Implementing a feature or fix is not by itself a request to add or run test coverage.
-Tests, when written, come only after the implementation's interface has been confirmed.
+These are the conventions to follow when spec work has been asked for. Deciding *what* to
+cover and writing it is this plugin's `write-specs` skill, a deliberately invoked step; when
+specs may be run at all is stated once, in `CLAUDE.md`'s Commands section.
 
 Specs mirror `lib/`. `spec/spec_helper.rb` calls `disable_monkey_patching!`, so always use
 `RSpec.describe`, never bare `describe`, and only `expect` syntax.
@@ -31,7 +31,9 @@ There is a 10-second timeout; a spec that hangs will surface as `execution expir
 
 ## What actually runs
 
-- `.rspec` excludes `spec/ext/**` from the default run; reach it via `bundle exec rake appraise`.
+- `.rspec` excludes `spec/ext/**` from the default run. Reach that tree with
+  `bundle exec rake appraise`, which runs it against the Active Record 7.1–8.1 gemfiles under
+  `gemfiles/`. A green `bundle exec rake` proves nothing about it.
 - Integration, Fiber, and adapter specs skip unless `ENABLE_EXTERNAL_TESTS=true` with
   `TEST_HTTP_URL`, `TEST_PG_URL`, `TEST_MYSQL_URL`, `TEST_REDIS_URL`.
 - `spec/spec_helper.rb` auto-includes `IntegrationHelper`, `RequestHelper`,
