@@ -4,5 +4,7 @@
 .idea/
 .devcontainer
 .claude-home
-.claude
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 docs

@@ -18,6 +18,78 @@ jobs:
       - name: Validate plugin
         run: claude plugin validate .
 
+      - name: Check flow skill names and README entries
+        run: |
+          # `claude plugin validate` only reads plugin.json — it never opens skill
+          # files — so nothing else catches a drifted or typo'd invocation name.
+          # The colon form (`name: feature:new` -> /rage-agent-kit:feature:new)
+          # is undocumented, so verify the shape here and re-check it live after a
+          # Claude Code upgrade; see CLAUDE.md.
+          status=0
+
+          for skill in plugins/rage-agent-kit/skills/*/SKILL.md; do
+            name=$(sed -n 's/^name: *//p' "$skill" | head -1)
+
+            if [ -z "$name" ]; then
+              echo "::error::$skill has no name in its frontmatter"
+              status=1
+              continue
+            fi
+
+            # Flow skills are the user-invoked ones and use the <document>:<action> form.
+            if grep -q '^disable-model-invocation: *true' "$skill"; then
+              case "$name" in
+                *:*) ;;
+                *)
+                  echo "::error::$skill is a flow skill but its name '$name' has no colon"
+                  status=1
+                  continue
+                  ;;
+              esac
+
+              if ! grep -qF "/rage-agent-kit:$name" README.md; then
+                echo "::error::/rage-agent-kit:$name is not documented in README.md"
+                status=1
+              fi
+            fi
+
+            echo "ok: $name"
+          done
+
+          exit $status
+
+      - name: Check no skill references a removed skill
+        run: |
+          if grep -rnE 'write-specs|review-framework|apply-review' plugins/ README.md CLAUDE.md; then
+            echo "::error::reference to a removed skill; use the /rage-agent-kit: flow names"
+            exit 1
+          fi
+
+          # Flow commands renamed in 0.6. README.md keeps them only in its upgrade table.
+          old='discovery:feature|status:feature|design:milestone|implement:milestone|test:cover|review:milestone|review:apply|adr:write'
+          if grep -rnE "$old" plugins/ CLAUDE.md \
+             || grep -nE "$old" README.md | grep -vE '^[0-9]+:[|] `(discovery|design|implement|test|review|adr|status):'; then
+            echo "::error::reference to a renamed flow command; use the 0.6 names"
+            exit 1
+          fi
+
+      - name: Check the blocking-I/O list in task:review matches the template
+        run: |
+          # Text after the marker, up to the end of the list, on one line.
+          list() {
+            tr '\n' ' ' < "$1" \
+              | sed -e "s/.*$2 *//" -e 's/`IO\.select`\..*/`IO.select`./' \
+              | tr -s ' '
+          }
+          canon=$(list plugins/rage-agent-kit/hooks/scripts/CLAUDE.md.template 'Flag as worker-freezing:')
+          copy=$(list plugins/rage-agent-kit/skills/task-review/SKILL.md 'use this copy[^:]*:')
+          if [ -z "$canon" ] || [ "$canon" != "$copy" ]; then
+            echo "::error::the blocking-I/O list in task-review/SKILL.md differs from CLAUDE.md.template"
+            echo "template:    $canon"
+            echo "task:review: $copy"
+            exit 1
+          fi
+
       - name: Check plugin.json and marketplace.json versions match
         run: |
           plugin_version=$(jq -r '.version' plugins/rage-agent-kit/.claude-plugin/plugin.json)

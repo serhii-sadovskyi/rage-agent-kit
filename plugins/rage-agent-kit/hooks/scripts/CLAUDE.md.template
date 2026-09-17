@@ -8,10 +8,27 @@ Rage is a single-threaded, Fiber-based Ruby web framework running on Iodine. Thi
 framework code: it runs on every request of every app built on Rage.
 
 Rationale for the rules below lives in [CONTRIBUTING.md]({{RAGE_ROOT}}CONTRIBUTING.md) and
-[ARCHITECTURE.md]({{RAGE_ROOT}}ARCHITECTURE.md). Read them before your first non-trivial
-change. Other skills in the rage-agent-kit Claude Code plugin cover file-specific conventions
-(public API, deadlocks, deferred, request path, codegen, specs, docs, templates) — use the one matching
-the files you're touching.
+[ARCHITECTURE.md]({{RAGE_ROOT}}ARCHITECTURE.md). Read them before your first larger
+change. The rage-agent-kit skills cover file-specific conventions. They load when you edit the
+files they cover; when you plan or review without editing, invoke the matching one with the
+Skill tool.
+
+## The flow
+
+Larger work is carried through phases that the engineer invokes deliberately, each of
+which stops for their approval before the next runs. Never start a phase because the previous
+one finished, and never fold one into another task. The phases are the `/rage-agent-kit:`
+commands in this session's command list; `/rage-agent-kit:feature:new` starts a new piece of
+work.
+
+The flow's documents live in `rage-feature-specs/`, a git checkout of the shared specs repo in
+the **session's working directory**. Phases edit those files but never commit them. Do not read
+a feature whose `spec.md` is `done` unless explicitly asked — completed work speaks through its
+component document (`rage-feature-specs/components/`), its ADRs, and the code. If
+`rage-feature-specs/` is here and you make a larger change outside the flow, read the component
+document for that part of the framework first; the code is still the final source of truth.
+
+Run `/rage-agent-kit:feature:status` when picking up work someone left half-finished.
 
 ## Stop and ask before
 
@@ -20,7 +37,9 @@ the files you're touching.
   task cannot be solved additively, or additive would leave a worse API, say so and propose
   the break — what breaks, who is affected, the deprecation shim, and which release it
   targets. `Rage.load_middlewares` in [lib/rage-rb.rb]({{RAGE_ROOT}}lib/rage-rb.rb) is the
-  house pattern. Proposing a break is a valid outcome; shipping one silently is not.
+  pattern to follow. Proposing a break is a valid outcome; shipping one silently is not. This
+  applies to surfaces in a released gem: one added since the latest release is not public yet
+  and can still change without a shim — say so. When you cannot tell, treat it as released.
 - Adding a gem to `{{RAGE_ROOT}}Gemfile` or `{{RAGE_ROOT}}rage.gemspec`. Rage's central
   promise is one process with no Redis and no separate workers, so a feature that needs an
   external service to function by default breaks the product, not just the dependency list.
@@ -39,28 +58,31 @@ is 3.4+.
 ## Blocking I/O
 
 One blocking call freezes the worker and every request in it. Audit every new call site and
-report the result; "none" is a valid result, silence is not. This applies everywhere on the
+report the result — "none" is a valid result, silence is not. This applies everywhere on the
 reactor, not just to files under `{{RAGE_ROOT}}lib/rage/middleware`.
 
 The list below is the canonical one; other rage-agent-kit skills refer to it rather than
 restating it. Flag as worker-freezing: native extension calls (DB drivers, crypto,
 compression, FFI); `Thread.new`; `system`, backticks, `Process.spawn`/`wait`, `IO.popen`;
-`flock`, `fsync`, large file reads and writes; long CPU-bound loops; client libraries with
-their own thread pool or `IO.select`.
+blocking `flock` (without `LOCK_NB`), `fsync`, large file reads and writes; long CPU-bound
+loops; client libraries with their own thread pool or `IO.select`.
 
-Escape hatches, in order of preference: scheduler-aware I/O, then `Iodine::WorkerPool` via
+Ways to move a blocking call off the reactor, in order of preference: scheduler-aware I/O;
+`Rage::Deferred`, when the caller does not need the result.
+
+Two things look like ways to do this, but framework code cannot rely on either.
 `blocking_operation_wait`
-([lib/rage/fiber_scheduler.rb]({{RAGE_ROOT}}lib/rage/fiber_scheduler.rb)), then
-`Rage::Deferred`, then `Fiber.new(blocking: true)` — never in the request path.
-
-`Fiber.pause` yields a tick, `Fiber.await` runs work concurrently, `Fiber.schedule` spawns.
-`Fiber.defer` is redefined in
-[lib/rage/ext/setup.rb]({{RAGE_ROOT}}lib/rage/ext/setup.rb) when the Active Record
-integration loads; it is not plain `Fiber.yield`.
+([lib/rage/fiber_scheduler.rb]({{RAGE_ROOT}}lib/rage/fiber_scheduler.rb)) sends native calls
+that can run outside the GVL to `Iodine::WorkerPool`, and the calling fiber yields until the
+pool finishes — but Ruby decides which calls go there, and it runs only when an app turns on
+`config.blocking_operation_pool` on a Ruby version that supports it. `Fiber.new(blocking: true)`
+runs without the scheduler, so a blocking call inside it still blocks the worker; Rage uses it
+only where that is acceptable (the IRB console, the RSpec helpers, the development-only Rails
+reload), and it never belongs on the request path in production.
 
 Fiber waits deadlock silently — Ruby's deadlock detector does not cover fibers under a
-scheduler. Before adding any wait, park, resource pool, or pub/sub wake-up, use this plugin's
-`deadlocks` skill.
+scheduler. Before adding any wait, park, resource pool, pub/sub wake-up, or file lock, use this
+plugin's `deadlocks` skill.
 
 ## Performance
 
@@ -69,7 +91,7 @@ scheduler. Before adding any wait, park, resource pool, or pub/sub wake-up, use 
   without the feature rather than branching on every request — see `Rage::Logger#rebuild!`
   and `Rage::Telemetry::Tracer#setup`.
 - No avoidable allocations on the happy path.
-- Boot time is a feature too. Moving work to boot makes requests cheaper and startup slower;
+- Boot time matters too. Moving work to boot makes requests cheaper and startup slower;
   when the two conflict, say which you chose and why.
 
 ## Conventions
@@ -83,15 +105,42 @@ scheduler. Before adding any wait, park, resource pool, or pub/sub wake-up, use 
 - User-facing methods need YARD `@param`/`@return`/`@example` tags. Write the tags as part of
   the change; running `yardoc` to validate them is a final-stage step (see Commands).
 - Active Record is not the only ORM — do not assume it is loaded.
-- Design docs under `{{RAGE_ROOT}}docs/` follow this plugin's `docs` skill.
+- `{{RAGE_ROOT}}docs/` holds the framework's own design docs. It is unrelated to the flow's
+  `rage-feature-specs/` described above — do not confuse the two, and never write flow
+  documents into the checkout. When editing a framework design doc, read it once
+  and patch in place: do not regenerate sections that did not change, do not number or
+  renumber headings, and do not redraw a diagram unless the actors or control flow changed.
+
+## Writing for people
+
+Rage is an open source project with contributors around the world, and many of them do not
+know English at an advanced level. Keep the vocabulary at about **B2 level** in everything a
+person reads: [CONTRIBUTING.md]({{RAGE_ROOT}}CONTRIBUTING.md), [README.md]({{RAGE_ROOT}}README.md),
+files under `{{RAGE_ROOT}}docs/`, `{{RAGE_ROOT}}CHANGELOG.md` entries, YARD text, commit
+messages, pull request descriptions, and your own replies in this session.
+
+- Use the common word when it says the same thing: "larger", not "non-trivial"; "in
+  progress", not "in flight"; "project rules", not "house rules".
+- Technical terms the reader needs (fiber, reactor, spec, ADR, checkout) are fine. Do not
+  replace them.
+- Longer sentences are fine. This is about vocabulary, not about cutting everything into
+  short sentences.
+- Simpler wording must keep the exact meaning. Never drop or change a detail to make a
+  sentence easier.
 
 ## Commands
 
 These are the verification tools this project has, not a checklist to run. **Do not run them
 unprompted during feature implementation.** `yardoc --fail-on-warning` and any RSpec
 invocation are final-stage verification steps — run them separately, and only when the user
-explicitly asks for that verification in this session. Never imply coverage you did not
-exercise.
+explicitly asks for that verification in this session. Never claim coverage you did not
+actually run. Writing tests is a separate step too: do not add or change tests as part of a
+change unless asked — tests are written in `/rage-agent-kit:task:test-core` (the core
+criteria, before the code) and `/rage-agent-kit:task:test-edge` (the rest, after the code).
+
+Entering a flow phase that authorizes a command *is* that explicit request, for the scope
+that phase states and no wider. Nothing authorizes the full suite. Outside a phase, the rule
+above stands unchanged.
 
 ```bash
 bundle exec rake                      # default task: RSpec only. CI runs rubocop and yardoc as separate jobs.
@@ -100,10 +149,9 @@ bundle exec yardoc --fail-on-warning
 bundle exec rake appraise             # spec/ext against Active Record 7.1-8.1
 ```
 
-`.rspec` excludes `{{RAGE_ROOT}}spec/ext/**` from the default run. Most integration, Fiber,
-and adapter specs skip unless `ENABLE_EXTERNAL_TESTS=true` is set along with `TEST_HTTP_URL`,
-`TEST_PG_URL`, `TEST_MYSQL_URL`, and `TEST_REDIS_URL`. A green local run is not full
-coverage — never claim specs passed that did not actually run.
+A green local run is not full coverage: parts of the suite are excluded by default, and others
+skip when external services are missing. This plugin's `specs` skill lists what actually runs —
+read it before reporting a result, and never claim specs passed that did not actually run.
 
 Never commit spec artifacts such as `{{RAGE_ROOT}}storage/deferred-*`.
 
@@ -113,20 +161,9 @@ Never commit spec artifacts such as `{{RAGE_ROOT}}storage/deferred-*`.
   an isolated git worktree (e.g. via an `isolation: "worktree"` agent option), do not report a
   task as done while the result sits unmerged in that worktree. Either merge the changes back
   into the checkout the user is looking at, or explicitly tell them the worktree's path and
-  branch name and how to inspect it (e.g. `git diff main <worktree-branch>`, runnable from the
-  main checkout without `cd` since it shares the same `.git`). A worktree's changes never show
-  up in the user's editor or `git status` on their own.
+  branch name and how to inspect it (e.g. `git diff main <worktree-branch>`). A worktree's
+  changes never show up in the user's editor or `git status` on their own.
 - Default to repo- and cwd-scoped lookups (`git` commands, ripgrep within the repo, known
   config paths) instead of broad filesystem scans. Never run a blind `find /` (or similar)
   sweep as a first resort — reach for a targeted command first (e.g. `git worktree list` to
-  find a worktree, not a filesystem search). Only widen scope beyond the repo when a targeted
-  lookup has failed and there's a clear reason to look further.
-
-## Report
-
-Close every change with the blocking-I/O audit; "none" is a valid result, silence is not.
-
-Public-API compatibility and spec coverage are review questions, not a closing checklist on
-every change — the rage-agent-kit plugin's `review-framework` skill covers both, invoked
-deliberately. The stop-and-ask rule above still applies the moment a change actually breaks a
-public API.
+  find a worktree, not a filesystem search).

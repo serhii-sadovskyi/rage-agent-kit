@@ -27,7 +27,18 @@ CI fails the build otherwise. Bump both on any change to `plugins/rage-agent-kit
 
 ## Before opening a PR
 
-Run this from the repo root and make sure it passes:
+After you clone the repo, turn on the pre-commit hook once:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+From then on, every commit that changes `plugins/` or `.claude-plugin/` runs
+`claude plugin validate .` and stops if it fails. If you work with Claude Code, a second
+hook in `.claude/settings.json` does the same check before Claude commits; that one needs no
+setup.
+
+You can still run the command yourself at any time, from the repo root:
 
 ```bash
 claude plugin validate .

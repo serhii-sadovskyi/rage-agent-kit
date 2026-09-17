@@ -4,153 +4,117 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for
-people developing the **[Rage framework](https://github.com/rage-rb/rage) itself** — i.e.
-contributors changing `rage-rb/rage` source (`lib/rage/`, `rage.gemspec`, `spec/`).
+contributors to the **[Rage framework](https://github.com/rage-rb/rage) itself**. Its one
+plugin teaches Claude Code the project rules for changing `rage-rb/rage` source. It covers
+blocking I/O and fiber deadlocks, public API changes that add without breaking anything, and
+the rules for codegen and specs. It also adds a workflow split into phases, and you approve
+each phase before the next one starts.
 
-This is **not** for people building applications on top of Rage, and it is independent of
-`rage-rb/skills` (which targets Rage app authors). Installing this marketplace has no effect
-on any Rage app or the Rage CLI — it only adds skills to your Claude Code session.
-
-## Why
-
-Framework code fails differently than app code — a wait with no timeout doesn't raise, it
-parks a fiber forever with no exception and no log line. That kind of bug is easy to write
-and easy to miss in review. With this plugin installed, asking Claude Code to add a new wait
-primitive in `lib/rage/fiber_scheduler.rb` gets you a fiber-deadlock-aware answer by default:
-Claude checks the change against the `deadlocks` skill's "every wait needs a bounded escape"
-rule before proposing it, instead of writing a plausible-looking wait that hangs under load.
-The same applies across the other skills — an "additive API" nudge before a public method
-signature changes, a blocking-I/O flag before a gem gets added to `rage.gemspec`, and so on.
-
-## Audience
-
-Rage core contributors: anyone opening PRs against `rage-rb/rage` who wants Claude Code to
-follow the framework's house rules — blocking-I/O and fiber-deadlock discipline, public API
-and changelog conventions, boot-time codegen patterns, spec conventions, and an adversarial
-framework-code review workflow — while working in that checkout.
+It is **not** for building apps on Rage. For that, use the separate `rage-rb/skills`
+marketplace.
 
 ## What's included
 
-The `rage-agent-kit` plugin ships these skills:
+### The flow
 
-- **rage-framework-core** — the framework's non-negotiables (Ruby 3.3.0 floor, nothing
-  blocking on the reactor, additive-by-default API, no new gems) and how to locate the
-  checkout root. The full contract lives in the generated `CLAUDE.md`; this skill is what
-  still holds when the session-start hook does not run.
-- **review-framework** — two-reviewer adversarial review of local framework changes.
-- **apply-review** — orchestrates applying a review-framework report's findings, grouped by
-  file and fanned out safely.
-- **public-api** — additive-API discipline, YARD, and CHANGELOG conventions.
-- **deadlocks** — fiber deadlock prevention for waits, parks, and pub/sub wake-ups, and the
-  Active Record integration under `lib/rage/ext/`.
-- **deferred** — how `Rage::Deferred` is layered: queue vs. storage backend, task lifecycle,
-  and the dead-letter store.
-- **request-path** — rules for the scheduler, `FiberWrapper`, and per-request middleware.
-- **codegen** — boot-time code generation conventions.
-- **specs** — RSpec conventions for the framework's own test suite, including the
-  appraisal-only `spec/ext/` tree.
-- **write-specs** — decides what spec coverage a change needs and writes it, against the
-  `specs` conventions, as its own deliberately invoked step.
-- **docs** — how to edit Rage design docs under `docs/` without rewriting them.
-- **templates** — conventions for the generated app templates under `lib/rage/templates/`.
+A workflow for larger pieces of work. You run each phase yourself, and **every phase stops for
+your approval** before the next one starts. The number of phases depends on the size of the
+work: a bug fix skips the design phase and often the edge-case test phase, and only features
+with several tasks get a full spec with a task list. Tests are written in two steps: before
+the code, failing tests for the main behavior and the most important errors; after the code,
+tests for edge cases and the rest.
 
-Skills load automatically based on their descriptions and the files you're touching — there's
-nothing to invoke manually.
+| Command | Phase |
+| --- | --- |
+| `/rage-agent-kit:feature:new` | Decide what kind of work it is, write the spec |
+| `/rage-agent-kit:task:design` | Design one task, with acceptance criteria |
+| `/rage-agent-kit:task:test-core` | Write failing tests for the most important acceptance criteria |
+| `/rage-agent-kit:task:implement` | Write the code, so that those tests pass |
+| `/rage-agent-kit:task:test-edge` | Add tests for edge cases and the other acceptance criteria |
+| `/rage-agent-kit:task:review` | Critical review by one or two reviewers, depending on the change |
+| `/rage-agent-kit:task:apply-findings` | Apply the review findings, then run the task's tests one last time |
+| `/rage-agent-kit:task:close` | Accept the decisions, close the task |
+| `/rage-agent-kit:feature:close` | Close the feature after its work is merged |
+| `/rage-agent-kit:component:sync` | Write or update a component document from the code |
+| `/rage-agent-kit:feature:status` | What is in progress, and what comes next |
+
+`feature:` commands work on a whole feature, `task:` commands on one of its tasks, and
+`component:` commands on a component document. See [FLOW.md](FLOW.md) for how to use them,
+with a diagram for each kind of work.
+
+The flow keeps its specs, task docs, and ADRs in a clone of
+[`rage-feature-specs`](https://github.com/rage-rb-fans/rage-feature-specs). Put that clone in
+your session's working directory, next to the Rage checkout rather than inside it. Phases edit
+those files but never commit them.
+
+Review reports are saved in `.rage-agent-kit/reviews/` in the same working directory. They are
+not part of either repository: the folder tells git to ignore it, so nothing commits it. A
+short summary of each review also goes into the task file, so someone on another computer can
+continue the work.
+
+The flow is *spec-anchored*. While a feature is in progress, its spec and task files are kept
+in line with the code. When a feature is finished, its files are not updated any more.
+Instead, each lasting part of the framework (a *component*, for example Deferred or telemetry)
+has one document in `rage-feature-specs/components/` that describes how it works now.
+`/rage-agent-kit:component:sync` writes that document from the code and updates it after
+changes made outside the flow, and `/rage-agent-kit:feature:close` updates it when a feature
+is finished. A later fix to finished work starts a new feature.
+
+These documents are for you and the agents. Other contributors and the maintainers do not see
+them, so anything they need still goes into the code, the YARD docs, the changelog, and the PR
+description.
+
+### Knowledge
+
+These load automatically when you edit the files they cover, and the flow commands load the
+ones they need:
+
+- **rage-framework-core**: core rules that always apply, and how to find the checkout
+- **public-api**: API changes that don't break existing code, YARD, CHANGELOG, app templates
+- **deadlocks**: how to prevent fiber deadlocks
+- **deferred**: how `Rage::Deferred` works inside
+- **request-path**: scheduler, `FiberWrapper`, per-request middleware
+- **codegen**: code generation at boot time
+- **specs**: RSpec conventions for the framework's test suite
 
 ## Install
-
-Nothing is copied into your Rage checkout at install time — everything lives in Claude
-Code's plugin cache. The one exception is `CLAUDE.md`, which the plugin's `SessionStart`
-hook writes into your checkout on every session; see
-[Session start hook](#session-start-hook) below, including the note on it being
-overwritten each time.
 
 ```
 /plugin marketplace add serhii-sadovskyi/rage-agent-kit
 /plugin install rage-agent-kit@rage-agent-kit
 ```
 
-To pick up updates later:
+Update with `/plugin marketplace update rage-agent-kit`. You can turn it off with
+`/plugin disable rage-agent-kit@rage-agent-kit`, or remove it with
+`/plugin uninstall rage-agent-kit@rage-agent-kit`.
 
-```
-/plugin marketplace update rage-agent-kit
-```
+### Upgrading from 0.5
 
-## Local development / testing
+Version 0.6 renames the flow commands:
 
-From this repo's root:
+| 0.5 | 0.6 |
+| --- | --- |
+| `discovery:feature` | `feature:new` |
+| `design:milestone` | `task:design` |
+| `implement:milestone` | `task:implement` |
+| `test:cover` | `task:test-edge` (tests before the code are the new `task:test-core`) |
+| `review:milestone` | `task:review` |
+| `review:apply` | `task:apply-findings` |
+| `adr:write` | `task:close` (closing the whole feature is the new `feature:close`) |
+| `status:feature` | `feature:status` |
 
-```bash
-claude plugin validate .
-```
-
-To try it locally before publishing changes:
-
-```
-/plugin marketplace add ./path/to/this-repo
-/plugin install rage-agent-kit@rage-agent-kit
-```
-
-Or, from a Rage checkout, point Claude Code directly at the plugin directory without
-installing it:
-
-```bash
-claude --plugin-dir ./path/to/this-repo/plugins/rage-agent-kit
-```
-
-## Uninstall / deactivate
-
-To remove the plugin entirely:
-
-```
-/plugin uninstall rage-agent-kit@rage-agent-kit
-/plugin marketplace remove serhii-sadovskyi/rage-agent-kit
-```
-
-To keep it installed but turn it off temporarily (e.g. for a single session), disable it
-instead of uninstalling:
-
-```
-/plugin disable rage-agent-kit@rage-agent-kit
-```
-
-Re-enable later with `/plugin enable rage-agent-kit@rage-agent-kit`. Note that `CLAUDE.md`
-written by the [session start hook](#session-start-hook) is not removed by uninstalling or
-disabling the plugin — it's a plain file in your checkout by that point, so delete or revert
-it manually if you no longer want it there.
+Features that are already in progress have no `component:` and no test records yet.
+`/rage-agent-kit:feature:status` shows them, and says which step to run next.
 
 ## Session start hook
 
-Every Claude Code session, the plugin's `SessionStart` hook looks for a Rage framework
-checkout from the working directory: either `rage.gemspec` right there, or exactly one
-immediate subdirectory containing it — the layout some setups use to keep AI-tool files
-(`AGENTS.md`, `CLAUDE.md`, `.cursor/`) in a parent directory so the checkout itself stays
-clean. Zero or more than one match (ambiguous) is a no-op.
-
-When a checkout is found, the hook **always overwrites `CLAUDE.md`** in the working
-directory with this plugin's
-[template](plugins/rage-agent-kit/hooks/scripts/CLAUDE.md.template), with paths rewritten
-for the detected checkout location. The generated file opens with a
-`<!-- Managed by the rage-agent-kit Claude Code plugin -->` marker, so it is identifiable in
-place. `CLAUDE.md` is plugin-managed — **any manual edits to it are silently discarded on the
-next session start.** Put project-specific rules somewhere else, such as an `AGENTS.md`: the
-hook never reads or touches `AGENTS.md`, so one there is safe from it.
-
-If a `CLAUDE.md` without that marker is already present the first time the hook runs, it is
-copied to `CLAUDE.md.bak` before being overwritten, and a line is written to stderr saying
-so. That backup happens once — later sessions overwrite the generated file without touching
-`CLAUDE.md.bak`.
-
-The hook only writes a file; it never runs `git add` or touches git state, and it's a
-no-op outside a Rage framework checkout. See
-[`plugins/rage-agent-kit/hooks/`](plugins/rage-agent-kit/hooks/).
-
-## Versioning
-
-`plugins/rage-agent-kit/.claude-plugin/plugin.json` and the matching entry in
-`.claude-plugin/marketplace.json` both carry a `version`. Bumping that version is the
-update signal — keep the two in sync.
+When a session starts in a Rage checkout (or in a directory with exactly one checkout directly
+inside it), the plugin **overwrites `CLAUDE.md`** in that directory using its
+[template](plugins/rage-agent-kit/hooks/scripts/CLAUDE.md.template). Manual edits to that file
+are lost, so put your own rules in `AGENTS.md`, which the hook never touches. If you already
+had your own `CLAUDE.md`, it is backed up once to `CLAUDE.md.bak`. Uninstalling the plugin
+does not delete the generated file.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add or edit a skill.
+See [CONTRIBUTING.md](CONTRIBUTING.md).

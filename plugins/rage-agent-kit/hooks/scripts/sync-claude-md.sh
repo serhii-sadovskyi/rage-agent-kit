@@ -6,15 +6,13 @@
 # framework checkout (rage.gemspec present) or contains exactly one immediate
 # subdirectory that is one — the common layout where AI-tool files are kept in
 # a parent directory so the checkout itself stays clean. The search does not
-# recurse deeper than one level, and more than one match is treated as
-# ambiguous and left alone.
+# recurse deeper than one level.
 #
 # CLAUDE.md at the working directory is always (re)written from the plugin's
 # template — with paths substituted for the detected checkout root — so it
-# stays consistent with the plugin version. It is a plugin-managed file, not
-# a place for manual edits; project-specific rules belong elsewhere. A
-# pre-existing CLAUDE.md that this plugin did not write is copied to
-# CLAUDE.md.bak once, before the first overwrite.
+# stays consistent with the plugin version. A pre-existing CLAUDE.md that this
+# plugin did not write is copied to CLAUDE.md.bak once, before the first
+# overwrite.
 #
 # An AGENTS.md, if present, is left completely alone — this hook only ever
 # touches CLAUDE.md.
@@ -22,8 +20,10 @@
 # Portability: POSIX sh and POSIX sed only. GNU-only sed constructs (such as
 # the `addr,+N` address form) break on the BSD sed shipped with macOS.
 #
-# Runs with `set -e` inside main() so any unexpected failure is caught and
-# reported to stderr without ever failing session startup (always exit 0).
+# Error handling: `set -e` would have no effect inside main(), because main
+# runs as the operand of `!` in an `if` condition and POSIX ignores -e there.
+# Anything that must stop the run therefore returns 1 explicitly. The script
+# always exits 0, so a failure here never fails session startup.
 
 MARKER='Managed by the rage-agent-kit Claude Code plugin'
 
@@ -35,8 +35,6 @@ escape_replacement() {
 }
 
 main() {
-  set -e
-
   template="${CLAUDE_PLUGIN_ROOT}/hooks/scripts/CLAUDE.md.template"
   [ -f "$template" ] || return 0
 
@@ -61,8 +59,6 @@ main() {
 
   if [ "$checkout" = "." ]; then
     prefix=""
-    # Both layouts substitute a real sentence, so there is one code path and
-    # the generated file always states where the checkout root is.
     note="The Rage framework checkout is this directory; paths below are relative to it."
   else
     prefix="$checkout/"
@@ -70,10 +66,11 @@ main() {
   fi
 
   # Preserve a hand-written CLAUDE.md the first time this plugin overwrites
-  # one. The marker is only present in files this hook generated.
+  # one. The marker is only present in files this hook generated. If the copy
+  # fails, stop rather than overwrite the file it was meant to save.
   if [ -f "CLAUDE.md" ] && [ ! -f "CLAUDE.md.bak" ] &&
      ! grep -qF "$MARKER" "CLAUDE.md"; then
-    cp "CLAUDE.md" "CLAUDE.md.bak"
+    cp "CLAUDE.md" "CLAUDE.md.bak" || return 1
     echo "sync-claude-md.sh: existing CLAUDE.md was not plugin-managed; saved a copy to CLAUDE.md.bak" >&2
   fi
 
