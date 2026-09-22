@@ -39,8 +39,7 @@ tests for edge cases and the rest.
 | `/rage-agent-kit:feature:status` | What is in progress, and what comes next |
 
 `feature:` commands work on a whole feature, `task:` commands on one of its tasks, and
-`component:` commands on a component document. See [FLOW.md](FLOW.md) for how to use them,
-with a diagram for each kind of work.
+`component:` commands on a component document.
 
 The flow keeps its specs, task docs, and ADRs in a clone of
 [`rage-feature-specs`](https://github.com/rage-rb-fans/rage-feature-specs). Put that clone in
@@ -74,7 +73,6 @@ ones they need:
 - **deadlocks**: how to prevent fiber deadlocks
 - **deferred**: how `Rage::Deferred` works inside
 - **request-path**: scheduler, `FiberWrapper`, per-request middleware
-- **codegen**: code generation at boot time
 - **specs**: RSpec conventions for the framework's test suite
 
 ## Install

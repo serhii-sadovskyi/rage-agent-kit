@@ -24,7 +24,7 @@ for the audience and install instructions.
 - Skills come in two kinds, and a new one is always one or the other:
   - **Knowledge** — Rage domain conventions, loaded automatically off the description when
     the files match. `rage-framework-core`, `public-api`, `deadlocks`, `deferred`,
-    `request-path`, `codegen`, `specs`.
+    `request-path`, `specs`.
   - **Flow** — the phases the engineer invokes. Marked `disable-model-invocation: true`, so
     the model never fires one on its own. Their descriptions are short: nothing matches
     against them, so they only need to read well in the invocable list.

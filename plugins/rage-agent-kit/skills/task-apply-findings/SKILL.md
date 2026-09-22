@@ -29,15 +29,6 @@ run, and the records below happen here.
 The review report, the task's Design, Implementation constraints, Acceptance criteria, and
 Verification records, the ADRs the task links, and the files the findings name.
 
-## Order of work
-
-Start with findings that touch a public contract, a wait/wake or pooling protocol, or more
-than one file. Decide the shape of those first, so smaller edits are made on top of the final
-structure instead of being done again.
-
-Then work through the remaining findings file by file, so each file is opened and edited once
-instead of being opened again for each finding.
-
 ## Do not write tests
 
 Applying findings is implementation. Coverage is `/rage-agent-kit:task:test-edge`. Do not add

@@ -89,7 +89,9 @@ plugin's `deadlocks` skill.
 - Do work at boot, not per request. See `RageController::API.__register_action`.
 - A feature must cost nothing to users who do not enable it. Generate a method with or
   without the feature rather than branching on every request — see `Rage::Logger#rebuild!`
-  and `Rage::Telemetry::Tracer#setup`.
+  and `Rage::Telemetry::Tracer#setup`. Build generated methods with
+  `class_eval <<~RUBY, __FILE__, __LINE__ + 1`, and use `Rage::Internal.build_arguments` when
+  generating calls to user-supplied methods.
 - No avoidable allocations on the happy path.
 - Boot time matters too. Moving work to boot makes requests cheaper and startup slower;
   when the two conflict, say which you chose and why.

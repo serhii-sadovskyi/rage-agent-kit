@@ -70,18 +70,18 @@ where the framework is the only caller. Asking for a nil check on an internal me
 3. **Assess the diff before launching anything.** Read the patch once and write down what the
    change actually touches — reactor or fiber state, durability and crash recovery, locking,
    extension points taking user code, codegen, config and wire formats, public surface,
-   per-request work. That assessment decides the tier, which reviewers run, what they focus
-   on, and which knowledge skills each one loads — the ones whose descriptions match the paths
-   in its part of the diff.
+   per-request work. That assessment decides which reviewers run, what they focus on, and
+   which knowledge skills each one loads — the ones whose descriptions match the paths in its
+   part of the diff.
 
-   - **Reviewer A** always runs: on `opus` when the diff touches durability, locking, crash
-     recovery, the reactor or fiber scheduler, or re-entrant state; `sonnet` otherwise.
-   - **Reviewer B** runs by default on `sonnet`. Skip it only when the diff touches none of
+   - **Reviewer A** always runs, on `opus`.
+   - **Reviewer B** runs by default, on `opus`. Skip it only when the diff touches none of
      the items in its list. "It looks like internals" is not that reason — a private method
      reachable from an extension point is still user-facing.
 
-   Skipping is a deliberate decision with a stated reason. The costs are not equal: a skipped reviewer that was needed ships a defect to every user, while an
-   unnecessary one costs one small subagent on a diff already saved to a file.
+   Skipping is a deliberate decision with a stated reason. The costs are not equal: a skipped
+   reviewer that was needed ships a defect to every user, while an unnecessary one costs one
+   subagent on a diff already saved to a file.
 
 4. **Find out what has actually been released.** Do not use `CHANGELOG.md` — entries get out
    of date, go missing, or are put in the wrong place. Check the latest release, once, for
@@ -110,13 +110,12 @@ where the framework is the only caller. Asking for a nil check on an internal me
    in every reviewer prompt. This check runs **once**, here, and is passed down — reviewers
    must never work it out again.
 
-5. **Launch the selected reviewers** with `subagent_type: "general-purpose"`, at the tiers
-   the assessment set, in the background. When both run, launch them **in parallel in a single
-   message** — that is what makes them actually run in parallel. Give each: the diff path, the
-   paths touched, the acceptance criteria, implementation constraints, Verification records,
-   and component invariants, the agreed breaks from the ADRs, the fact about what has been
-   released, the risk areas and knowledge skills the assessment named, the "Both reviewers"
-   section below, and both the adversarial framing and the "do not report" section above. Run
+5. **Launch the selected reviewers** with `subagent_type: "general-purpose"`, both at once.
+   Give each: the diff path, the paths touched, the acceptance criteria, implementation
+   constraints, Verification records, and component invariants, the agreed breaks from the
+   ADRs, the fact about what has been released, the risk areas and knowledge skills the
+   assessment named, the "Both reviewers" section below, and both the adversarial framing and
+   the "do not report" section above. Run
    the selected reviewers whatever the diff size — a one-line change that removes a timeout or
    moves a yield point is the highest-risk kind, not the lowest.
 
@@ -152,7 +151,11 @@ I/O on the reactor, fiber leaks and re-entrancy.
 - Durability: atomic rename, `flock` inode semantics, crash recovery, partial writes.
 - Cleanup: tmp files, lock files, subscriptions, and any hash keyed by fiber, connection, or
   `object_id` that nothing deletes from.
-- Failure paths: if this raises halfway, what is left behind?
+- Failure paths: if this raises halfway, what is left behind — a lock, connection, or
+  subscription not released, a half-written file? Nothing handles an exception raised inside
+  an `Iodine.run_after` block, so code scheduled that way must rescue on its own.
+- Removed guards: when the diff deletes a timeout, `rescue`, check, or yield point, find why
+  it was added (`git log -L` or `git blame` on the old lines) before accepting the removal.
 - Re-entrancy and ordering: what if it runs twice for the same request, fiber, or connection,
   or the two halves interleave with another fiber between them?
 
@@ -185,10 +188,13 @@ Users do not attack the code on purpose — they just do not know the contract.
   changing it costs nothing, not as a compatibility break.
 - Doc tags, internal naming, `# frozen_string_literal: true` on new files, and the changelog
   entry — check each against the `public-api` skill, which this reviewer loads.
+- Comments and YARD text the change made wrong: a description, `@param`, `@return`, or
+  `@example` that no longer matches the new behavior.
 
 ## Report and gate
 
-Per finding: severity, file and line, what breaks and under what load, and a suggested fix.
+Per finding: severity, confidence (high, medium, or low), file and line, what breaks and under
+what load, and a suggested fix.
 Start by naming which reviewers ran and, if one was skipped, the reason from the assessment —
 the reader needs to know which area was not reviewed.
 
